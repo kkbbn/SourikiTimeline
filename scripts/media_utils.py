@@ -122,11 +122,13 @@ def download_youtube_with_pytube(url, output_path):
 def ydl_download(url, output_path, format):
     if os.path.exists(output_path):
         os.remove(output_path)
-    
+
     option = {
         'outtmpl': output_path,
         'format': format,
         'ffmpeg_location': FFMPEG_BINARY,
+        'cookiesfrombrowser': ('chrome',),
+        'remote_components': ['ejs:github'],
     }
     with YoutubeDL(option) as ydl:
         result = ydl.download([url])

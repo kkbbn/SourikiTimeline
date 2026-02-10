@@ -1,9 +1,42 @@
 import cv2
 import numpy as np
+import platform
 from paddleocr import PaddleOCR
 from PIL import ImageFont, ImageDraw, Image
 
 from scripts.debug_utils import debug_args
+
+def get_system_font():
+    """Get a Japanese-capable font based on the operating system."""
+    system = platform.system()
+    if system == 'Darwin':  # macOS
+        font_paths = [
+            '/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc',
+            '/System/Library/Fonts/Hiragino Sans GB.ttc',
+            '/Library/Fonts/Arial Unicode.ttf',
+        ]
+    elif system == 'Windows':
+        font_paths = [
+            'meiryo.ttc',
+            'msgothic.ttc',
+            'msmincho.ttc',
+        ]
+    else:  # Linux
+        font_paths = [
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/fonts-japanese-gothic.ttf',
+        ]
+
+    for font_path in font_paths:
+        try:
+            ImageFont.truetype(font_path, 10)
+            return font_path
+        except OSError:
+            continue
+
+    return None  # Will use default font
+
+_system_font = get_system_font()
 
 # ocr = PaddleOCR(use_angle_cls=False, lang='japan', show_log=False)
 ocrs = {
@@ -57,7 +90,10 @@ def draw_image_string(image: np.ndarray, text, position, hex_font_color, font_si
     font_color = hex_to_rgb(hex_font_color)
     stroke_color = hex_to_rgb(hex_stroke_color)
 
-    font = ImageFont.truetype('meiryo.ttc', int(font_size))
+    if _system_font:
+        font = ImageFont.truetype(_system_font, int(font_size))
+    else:
+        font = ImageFont.load_default()
 
     img_pil = Image.fromarray(image)
     draw = ImageDraw.Draw(img_pil)

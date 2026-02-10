@@ -11,8 +11,8 @@ fi
 
 source ./venv/bin/activate
 
-pip freeze
+pip3.10 freeze
 
-python3 ./launch.py
+python3.10 ./launch.py
 
 deactivate

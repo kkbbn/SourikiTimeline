@@ -7,9 +7,9 @@ skip_key_wait=$1
 python3.10 -m venv venv
 source ./venv/bin/activate
 
-pip3 install --upgrade -r requirements-osx.txt
+pip3.10 install --upgrade -r requirements-osx.txt
 
-pip freeze
+pip3.10 freeze
 
 cat VERSION > .local_version
 

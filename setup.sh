@@ -4,12 +4,12 @@ cd `dirname $0`
 
 skip_key_wait=$1
 
-python3.10 -m venv venv
+python3 -m venv venv
 source ./venv/bin/activate
 
-pip3.10 install --upgrade -r requirements-osx.txt
+pip3 install --upgrade -r requirements-unix.txt
 
-pip3.10 freeze
+pip3 freeze
 
 cat VERSION > .local_version
 

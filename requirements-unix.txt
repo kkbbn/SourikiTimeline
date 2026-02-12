@@ -8,4 +8,5 @@ pillow
 pydantic
 pyperclip
 pytubefix
+secretstorage
 yt-dlp

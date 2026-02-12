@@ -138,3 +138,13 @@ https://twitter.com/kidonaru
    - ゲームの情報を参照しています
 - ブルーアーカイブ(ブルアカ)攻略Wiki - https://gamerch.com/bluearchive/
   - スキル一覧の情報を参照しています
+
+## Prerequisites
+
+### Linux
+
+```
+sudo apt install python3.12-venv
+sudo apt install python3-tk
+sudo apt install libdbus-glib-1-dev
+```

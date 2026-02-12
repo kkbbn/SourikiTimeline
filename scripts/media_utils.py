@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import urllib.parse
+from pathlib import Path
 from moviepy import VideoFileClip
 from moviepy.config import FFMPEG_BINARY
 from pytubefix import YouTube
@@ -10,6 +11,11 @@ from yt_dlp import YoutubeDL
 
 from scripts.common_utils import get_tmp_dir, get_tmp_file_name, get_tmp_file_path
 from scripts.debug_utils import debug_args
+
+# Ensure deno is available for yt-dlp JS runtime
+_deno_path = str(Path.home() / '.deno' / 'bin')
+if _deno_path not in os.environ.get('PATH', '') and os.path.isdir(_deno_path):
+    os.environ['PATH'] = _deno_path + os.pathsep + os.environ.get('PATH', '')
 
 @debug_args
 def resize_image(input_image_path, output_image_path, size):
@@ -55,6 +61,8 @@ def get_video_info(url, downloader):
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
+            'cookiesfrombrowser': ('chrome',),
+            'remote_components': ['ejs:github'],
         }
         with YoutubeDL(option) as ydl:
             info = ydl.extract_info(url, download=False)

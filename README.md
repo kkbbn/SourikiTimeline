@@ -147,4 +147,5 @@ https://twitter.com/kidonaru
 sudo apt install python3.12-venv
 sudo apt install python3-tk
 sudo apt install libdbus-glib-1-dev
+sudo snap refresh node --channel=22/stable
 ```

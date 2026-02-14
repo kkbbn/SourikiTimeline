@@ -22,16 +22,54 @@ def fetch_json(url):
         return json.loads(response.read().decode("utf-8"))
 
 
-def build_file_map():
-    """Build a map of filename -> full path for all files in download directories."""
-    file_map = {}
+def collect_png_files():
+    """Collect all PNG files from download directories."""
+    files = []
     for dir_name in os.listdir(DOWNLOAD_DIR):
         dir_path = os.path.join(DOWNLOAD_DIR, dir_name)
         if not os.path.isdir(dir_path):
             continue
         for filename in os.listdir(dir_path):
-            file_map[filename] = os.path.join(dir_path, filename)
-    return file_map
+            if filename.endswith(".png"):
+                files.append((filename, os.path.join(dir_path, filename)))
+    return files
+
+
+def resolve_dst_filename(filename, dev_name_to_name):
+    """Determine the destination filename for a downloaded PNG file.
+
+    1. Exact DevName match -> {Name}.png
+    2. DevName prefix match (suffix not starting with lowercase) -> {Name}{suffix}.png
+    3. Fallback -> strip Skill_Portrait_ prefix, keep English name
+    """
+    m = re.match(r"Skill_Portrait_(.+)\.png$", filename)
+    if not m:
+        return filename
+
+    char_name = m.group(1)
+
+    # Step 1: Exact match against DevName
+    if char_name in dev_name_to_name:
+        return f"{dev_name_to_name[char_name]}.png"
+
+    # Step 2: Find longest DevName that is a prefix of char_name
+    # with the constraint that the suffix doesn't start with a lowercase letter
+    best_dev_name = None
+    for dev_name in dev_name_to_name:
+        if char_name.startswith(dev_name) and len(dev_name) < len(char_name):
+            # Suffix must not start with lowercase to avoid e.g. "Hina" matching "Hinata"
+            suffix_start = char_name[len(dev_name)]
+            if suffix_start.islower():
+                continue
+            if best_dev_name is None or len(dev_name) > len(best_dev_name):
+                best_dev_name = dev_name
+
+    if best_dev_name:
+        suffix = char_name[len(best_dev_name):]
+        return f"{dev_name_to_name[best_dev_name]}{suffix}.png"
+
+    # Step 3: No match, keep English name
+    return f"{char_name}.png"
 
 
 def main():
@@ -41,43 +79,25 @@ def main():
     students = fetch_json(SCHALEDB_URL)
     print(f"Found {len(students)} students")
 
-    file_map = build_file_map()
+    dev_name_to_name = {s["DevName"]: s["Name"] for s in students.values()}
+
+    all_files = collect_png_files()
+    print(f"Found {len(all_files)} PNG files in downloads")
 
     copied = 0
-    not_found = 0
-    for student_id, student in students.items():
-        dev_name = student["DevName"]
-        name = student["Name"]
+    for filename, src_path in all_files:
+        dst_filename = resolve_dst_filename(filename, dev_name_to_name)
+        dst_path = os.path.join(ASSETS_DIR, dst_filename)
 
-        # Find all files matching Skill_Portrait_{DevName}{any_suffix}.png
-        prefix = f"Skill_Portrait_{dev_name}"
-        # Suffix must not start with a lowercase letter to avoid
-        # e.g. DevName "Hina" matching "Skill_Portrait_Hinata.png"
-        matching_files = [
-            f for f in file_map
-            if re.match(re.escape(prefix) + r"(?![a-z]).*\.png$", f)
-        ]
-
-        if not matching_files:
-            print(f"WARNING: Could not find {prefix}.png for {name} (DevName: {dev_name})")
-            not_found += 1
+        # Cache: skip if destination already exists
+        if os.path.exists(dst_path):
             continue
 
-        for src_filename in matching_files:
-            # Extract suffix: Skill_Portrait_{DevName}{suffix}.png -> {suffix}
-            suffix = src_filename[len(prefix):-len(".png")]
-            dst_filename = f"{name}{suffix}.png"
-            dst_path = os.path.join(ASSETS_DIR, dst_filename)
+        shutil.copy2(src_path, dst_path)
+        print(f"Copied: {filename} -> {dst_filename}")
+        copied += 1
 
-            # Cache: skip if destination already exists
-            if os.path.exists(dst_path):
-                continue
-
-            shutil.copy2(file_map[src_filename], dst_path)
-            print(f"Copied: {src_filename} -> {dst_filename}")
-            copied += 1
-
-    print(f"Done! Copied {copied} files. {not_found} not found.")
+    print(f"Done! Copied {copied} files.")
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import shutil
 import urllib.request
 
@@ -48,20 +49,33 @@ def main():
         dev_name = student["DevName"]
         name = student["Name"]
 
-        src_filename = f"Skill_Portrait_{dev_name}.png"
-        dst_path = os.path.join(ASSETS_DIR, f"{name}.png")
+        # Find all files matching Skill_Portrait_{DevName}{any_suffix}.png
+        prefix = f"Skill_Portrait_{dev_name}"
+        # Suffix must not start with a lowercase letter to avoid
+        # e.g. DevName "Hina" matching "Skill_Portrait_Hinata.png"
+        matching_files = [
+            f for f in file_map
+            if re.match(re.escape(prefix) + r"(?![a-z]).*\.png$", f)
+        ]
 
-        # Cache: skip if destination already exists
-        if os.path.exists(dst_path):
+        if not matching_files:
+            print(f"WARNING: Could not find {prefix}.png for {name} (DevName: {dev_name})")
+            not_found += 1
             continue
 
-        if src_filename in file_map:
+        for src_filename in matching_files:
+            # Extract suffix: Skill_Portrait_{DevName}{suffix}.png -> {suffix}
+            suffix = src_filename[len(prefix):-len(".png")]
+            dst_filename = f"{name}{suffix}.png"
+            dst_path = os.path.join(ASSETS_DIR, dst_filename)
+
+            # Cache: skip if destination already exists
+            if os.path.exists(dst_path):
+                continue
+
             shutil.copy2(file_map[src_filename], dst_path)
-            print(f"Copied: {src_filename} -> {name}.png")
+            print(f"Copied: {src_filename} -> {dst_filename}")
             copied += 1
-        else:
-            print(f"WARNING: Could not find {src_filename} for {name} (DevName: {dev_name})")
-            not_found += 1
 
     print(f"Done! Copied {copied} files. {not_found} not found.")
 

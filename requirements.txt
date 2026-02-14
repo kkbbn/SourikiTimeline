@@ -9,3 +9,4 @@ pydantic
 pyperclip
 pytubefix
 yt-dlp
+beautifulsoup4

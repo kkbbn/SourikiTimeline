@@ -9,3 +9,7 @@ tmp
 checkpoints
 .local_version
 favicon.ico
+resources/download/*
+!resources/download/.gitkeep
+resources/assets/*
+!resources/assets/.gitkeep

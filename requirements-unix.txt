@@ -10,3 +10,4 @@ pyperclip
 pytubefix
 secretstorage
 yt-dlp
+beautifulsoup4

@@ -337,6 +337,7 @@ class ProjectConfig(JsonConfig):
 
             remain_cost_value = float(remain_cost) if remain_cost else 0
             if remain_cost_omit_value > 0 and remain_cost_value < remain_cost_omit_value + 0.01:
+                invoke_cost = ""
                 remain_cost = ""
 
             new_row = []

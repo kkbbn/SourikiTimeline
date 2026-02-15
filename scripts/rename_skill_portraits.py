@@ -35,14 +35,12 @@ def collect_png_files():
     return files
 
 
-def resolve_dst_filename(filename, dev_name_to_name, path_name_to_name):
+def resolve_dst_filename(filename, dev_name_to_name):
     """Determine the destination filename for a downloaded PNG file.
 
     1. Exact DevName match -> {Name}.png
     2. DevName prefix match (suffix not starting with lowercase) -> {Name}{suffix}.png
-    3. PathName match (case-insensitive) -> {Name}.png
-    4. PathName prefix match -> {Name}{suffix}.png
-    5. Fallback -> strip Skill_Portrait_ prefix, keep English name
+    3. Fallback -> strip Skill_Portrait_ prefix, keep English name
     """
     m = re.match(r"Skill_Portrait_(.+)\.png$", filename)
     if not m:
@@ -70,29 +68,7 @@ def resolve_dst_filename(filename, dev_name_to_name, path_name_to_name):
         suffix = char_name[len(best_dev_name):]
         return f"{dev_name_to_name[best_dev_name]}{suffix}.png"
 
-    # Step 3: Exact match against PathName (case-insensitive)
-    char_lower = char_name.lower()
-    if char_lower in path_name_to_name:
-        return f"{path_name_to_name[char_lower]}.png"
-
-    # Step 4: Find longest PathName that is a prefix of char_name
-    best_path_name = None
-    for path_name in path_name_to_name:
-        if char_lower.startswith(path_name) and len(path_name) < len(char_lower):
-            remaining = char_lower[len(path_name):]
-            # Suffix should start with underscore or uppercase in original
-            if remaining[0] not in ('_',):
-                orig_suffix_start = char_name[len(path_name)]
-                if orig_suffix_start.islower():
-                    continue
-            if best_path_name is None or len(path_name) > len(best_path_name):
-                best_path_name = path_name
-
-    if best_path_name:
-        suffix = char_name[len(best_path_name):]
-        return f"{path_name_to_name[best_path_name]}{suffix}.png"
-
-    # Step 5: No match, keep English name
+    # Step 3: No match, keep English name
     return f"{char_name}.png"
 
 
@@ -104,14 +80,13 @@ def main():
     print(f"Found {len(students)} students")
 
     dev_name_to_name = {s["DevName"]: s["Name"] for s in students.values()}
-    path_name_to_name = {s["PathName"]: s["Name"] for s in students.values() if s.get("PathName")}
 
     all_files = collect_png_files()
     print(f"Found {len(all_files)} PNG files in downloads")
 
     copied = 0
     for filename, src_path in all_files:
-        dst_filename = resolve_dst_filename(filename, dev_name_to_name, path_name_to_name)
+        dst_filename = resolve_dst_filename(filename, dev_name_to_name)
         dst_path = os.path.join(ASSETS_DIR, dst_filename)
 
         # Cache: skip if destination already exists

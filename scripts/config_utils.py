@@ -332,7 +332,7 @@ class ProjectConfig(JsonConfig):
             remain_cost = row["残コスト"]
 
             if elapsed_time > 0 and cost_omit_seconds > 0 and elapsed_time < cost_omit_seconds + 0.01:
-                invoke_cost = ""
+                invoke_cost = "即"
                 remain_cost = ""
 
             remain_cost_value = float(remain_cost) if remain_cost else 0

@@ -10,10 +10,11 @@ import ctypes
 from moviepy import VideoFileClip
 
 from scripts.chara_skill import CharaSkill
-from scripts.common_utils import convert_safe_filename, load_memo, load_timeline, save_image, save_memo, save_timeline, str_to_time, time_to_str
+from scripts.common_utils import convert_safe_filename, format_short_chara_name, load_memo, load_timeline, save_image, save_memo, save_timeline, str_to_time, time_to_str
 from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
 from scripts.debug_timer import DebugTimer
 from scripts.debug_utils import debug_args
+from scripts.match_utils import load_asset_templates, find_card_matches, select_card_characters
 from scripts.media_utils import download_video, extract_video_frame, get_video_info, resize_image
 from scripts.ocr_utils import crop_image, draw_image_line, draw_image_rect, draw_image_string, get_color_fill_percentage, get_image_bar_percentage, get_mask_image_rect, ocr_image
 from scripts.platform_utils import get_folder_path
@@ -366,10 +367,6 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
     cost_color1 = config.mask_cost_color1
     cost_color2 = config.mask_cost_color2
     cost_color_threshold = config.mask_cost_color_threshold
-    skill_color1 = config.mask_skill_color1
-    skill_color2 = config.mask_skill_color2
-    skill_color_threshold = config.mask_skill_color_threshold
-    skill_color_fill_percentage = config.mask_skill_color_fill_percentage
     ignore_chara_names = config.timeline_ignore_chara_names
     max_time = config.timeline_max_time
     movie_x = config.movie_x
@@ -377,48 +374,54 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
     movie_width = config.movie_width
     movie_height = config.movie_height
     frame_rate = config.movie_frame_rate
-    skill_mask_rect = config.get_skill_mask_rect()
     cost_mask_rect = config.get_cost_mask_rect()
     time_mask_rect = config.get_time_mask_rect()
 
+    # Load character templates for image matching
+    all_templates = load_asset_templates()
+    all_templates = [t for t in all_templates if t.name not in ignore_chara_names]
+
+    # Build CharaSkill lookup for name/skill info
     chara_skills = CharaSkill.from_tsv()
-    chara_skills = [cs for cs in chara_skills if cs.chara_name not in ignore_chara_names]
+    chara_skill_map = {cs.chara_name: cs for cs in chara_skills}
+
+    MATCH_SCALE = 0.65
+    MATCH_THRESHOLD = 0.7
+    DISCOVERY_SECONDS = 10  # seconds to scan for party member discovery
+    # Window sizes for robust detection (in frames)
+    CARD_WINDOW = int(frame_rate * 3)   # look back 3 seconds for card state
+    COST_DROP_THRESHOLD = 1.0           # minimum cost drop to trigger detection
 
     rows = []
     columns = get_timeline_columns()
 
+    import cv2
+
     class FrameData:
-        chara_skill: CharaSkill = None
-        time_image: np.ndarray = None
-        movie_time: int = 0
-        cost: float = 0
+        def __init__(self, matched_names, time_image, movie_time, cost):
+            self.matched_names: set = matched_names
+            self.time_image: np.ndarray = time_image
+            self.movie_time: float = movie_time
+            self.cost: float = cost
+            self.remain_time: float = 0
 
-        remain_time: int = 0
-
-        def __init__(self, chara_skill, time_image, movie_time, cost):
-            self.chara_skill = chara_skill
-            self.time_image = time_image
-            self.movie_time = movie_time
-            self.cost = cost
-
-        def calculate(self):
+        def calculate_time(self):
             if self.time_image is None:
                 return
-
-            time_texts = ocr_image(self.time_image, None, 'en')
+            # Convert RGB to BGR for OCR (moviepy gives RGB, OCR expects BGR)
+            bgr_time_image = cv2.cvtColor(self.time_image, cv2.COLOR_RGB2BGR)
+            time_texts = ocr_image(bgr_time_image, None, 'en')
             remain_time_text = format_time_string("".join(time_texts))
             self.remain_time = str_to_time(remain_time_text)
-
-            if self.remain_time == 0:
-                self.cost = 0
-
             self.time_image = None
 
-    prev_frame_chara_skill = None
-    last_max_cost = 0
-    is_executing_skill = False
     frame_datas: list[FrameData] = []
-    used_skill_frame_ids = []
+
+    # Phase 1: Discovery - identify party members from the first N seconds
+    # Phase 2: Tracking - only match identified party members
+    party_members = set()
+    discovery_frame_count = int(DISCOVERY_SECONDS * frame_rate)
+    party_templates = all_templates  # Start with all templates
 
     with VideoFileClip(input_path) as clip:
         end_time = clip.duration if end_time == 0 else end_time
@@ -427,78 +430,168 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
             for frame_id, frame in enumerate(subclip.iter_frames()):
                 movie_time = start_time + (frame_id / frame_rate)
                 movie_time_text = time_to_str(movie_time)
-                print(f"progress movie... {movie_time_text} / {end_time_text}")
 
                 input_image = crop_image(frame, (movie_x, movie_y, movie_width, movie_height))
 
-                fill_percentage = max(get_color_fill_percentage(input_image, skill_mask_rect, skill_color1, skill_color_threshold),
-                                          get_color_fill_percentage(input_image, skill_mask_rect, skill_color2, skill_color_threshold))
+                # Convert RGB (moviepy) to BGR (OpenCV) for template matching
+                bgr_image = cv2.cvtColor(input_image, cv2.COLOR_RGB2BGR)
 
-                chara_skill = None
-
-                if fill_percentage >= skill_color_fill_percentage:
-                    if not is_executing_skill:
-                        skill_texts = ocr_image(input_image, skill_mask_rect)
-                        skill_text = "".join(skill_texts)
-
-                        chara_skill, similarity = CharaSkill.find_best_match(chara_skills, skill_text)
+                # Match character cards
+                if frame_id < discovery_frame_count:
+                    # Discovery phase: match all templates
+                    matches = find_card_matches(
+                        bgr_image, all_templates,
+                        scale=MATCH_SCALE, threshold=MATCH_THRESHOLD)
+                    cards = select_card_characters(matches, max_cards=4)
+                    matched_names = set(name for name, _, _ in cards)
+                    party_members.update(matched_names)
+                    print(f"[discovery] {movie_time_text} / {end_time_text} cards={[n for n,_,_ in cards]}")
                 else:
-                    is_executing_skill = False
+                    # Tracking phase: only match party members
+                    if frame_id == discovery_frame_count:
+                        party_templates = [t for t in all_templates if t.name in party_members]
+                        print(f"Party members identified: {sorted(party_members)}")
 
+                    matches = find_card_matches(
+                        bgr_image, party_templates,
+                        scale=MATCH_SCALE, threshold=MATCH_THRESHOLD)
+                    cards = select_card_characters(matches, max_cards=4)
+                    matched_names = set(name for name, _, _ in cards)
+
+                    if frame_id % 10 == 0:
+                        print(f"[tracking] {movie_time_text} / {end_time_text} cards={sorted(matched_names)}")
+
+                # Get cost from the cost bar
+                cost = get_image_bar_percentage(
+                    input_image, cost_mask_rect,
+                    cost_color1, cost_color2, cost_color_threshold) / 10
+
+                # Get time image for later OCR (keep as RGB, convert in calculate_time)
                 time_image = crop_image(input_image, time_mask_rect)
 
-                cost = get_image_bar_percentage(
-                        input_image,
-                        cost_mask_rect,
-                        cost_color1,
-                        cost_color2,
-                        cost_color_threshold) / 10
-                
-                frame_data = FrameData(
-                    chara_skill,
-                    time_image,
-                    movie_time,
-                    cost
-                )
-
+                frame_data = FrameData(matched_names, time_image, movie_time, cost)
                 frame_datas.append(frame_data)
 
-                if chara_skill is not None and chara_skill == prev_frame_chara_skill:
-                    used_skill_frame_ids.append(frame_id)
+    # Detect skill activations using cost-drop + window-based card comparison.
+    # When cost drops significantly, look at recent frames to find which
+    # character's card disappeared. This handles sparse card detection.
+    skill_events = []  # list of (frame_id, chara_name)
+    recently_activated = {}  # name -> frame_id, debounce duplicate detections
 
-                    is_executing_skill = True
+    def get_recent_cards(end_frame_id, window):
+        """Get the union of all detected cards in a window of frames before end_frame_id."""
+        cards = set()
+        start = max(0, end_frame_id - window)
+        for j in range(start, end_frame_id):
+            cards.update(frame_datas[j].matched_names)
+        return cards
 
-                prev_frame_chara_skill = chara_skill
+    for i in range(1, len(frame_datas)):
+        curr = frame_datas[i]
+        prev = frame_datas[i - 1]
 
-    for skill_index, frame_id in enumerate(used_skill_frame_ids):
-        frame_data = frame_datas[frame_id]
-        frame_data.calculate()
+        # Check for significant cost drop
+        cost_drop = prev.cost - curr.cost
+        if cost_drop < COST_DROP_THRESHOLD:
+            continue
 
-        movie_time_text = time_to_str(frame_data.movie_time)
-        print(f"progress frame... {movie_time_text} / {end_time_text}")
+        # Cost dropped: find which character was activated
+        # Look at cards visible in recent frames before cost drop
+        before_cards = get_recent_cards(i, CARD_WINDOW)
+        # Look at cards visible in the current and next few frames after cost drop
+        after_cards = set()
+        after_end = min(len(frame_datas), i + CARD_WINDOW)
+        for j in range(i, after_end):
+            after_cards.update(frame_datas[j].matched_names)
 
-        prev_skill_frame_id = max(frame_id - 10, 0)
-        if skill_index > 0:
-            prev_skill_frame_id = max(used_skill_frame_ids[skill_index - 1], prev_skill_frame_id)
+        # The character(s) present before but not after = skill activation
+        disappeared = before_cards - after_cards
 
+        if not disappeared:
+            # If window comparison doesn't find a disappearance,
+            # fall back to direct frame comparison
+            if prev.matched_names and curr.matched_names:
+                disappeared = prev.matched_names - curr.matched_names
+
+        if not disappeared:
+            # Still no character identified - use the cost drop frame
+            # and try to identify from the single frame comparison
+            # (Look at the frame just before the drop)
+            if prev.matched_names:
+                # Pick the character from before_cards that isn't in curr
+                disappeared = prev.matched_names - curr.matched_names
+
+        # Only one skill can activate per cost drop; pick the character
+        # that was most recently visible (most likely the one that was tapped)
+        best_candidate = None
+        best_recency = -1
+        for name in disappeared:
+            # Debounce: skip if this character activated within last N frames
+            debounce_frames = int(frame_rate * 5)  # 5 second debounce
+            if name in recently_activated and (i - recently_activated[name]) < debounce_frames:
+                continue
+            # Pick the candidate that was most recently seen in a frame
+            recency = 0
+            for j in range(i - 1, max(i - CARD_WINDOW - 1, -1), -1):
+                if name in frame_datas[j].matched_names:
+                    recency = j
+                    break
+            if recency > best_recency:
+                best_recency = recency
+                best_candidate = name
+
+        if best_candidate:
+            skill_events.append((i, best_candidate))
+            recently_activated[best_candidate] = i
+            print(f"Skill detected: {best_candidate} at frame {i} "
+                  f"(time={time_to_str(curr.movie_time)}, "
+                  f"cost {prev.cost:.1f} -> {curr.cost:.1f})")
+
+    # Build timeline rows from skill events
+    for event_frame_id, chara_name in skill_events:
+        # Try OCR on the event frame and nearby frames (skill animations
+        # often obscure the time display at the exact activation frame)
+        remain_time = 0
+        search_range = int(frame_rate * 3)  # search ±3 seconds
+        for offset in range(0, search_range + 1):
+            for direction in ([0] if offset == 0 else [-offset, offset]):
+                idx = event_frame_id + direction
+                if idx < 0 or idx >= len(frame_datas):
+                    continue
+                fd = frame_datas[idx]
+                fd.calculate_time()
+                if fd.remain_time > 0:
+                    remain_time = fd.remain_time
+                    break
+            if remain_time > 0:
+                break
+
+        # Find cost info from surrounding frames
+        prev_event_frame = max(event_frame_id - int(frame_rate * 5), 0)
         last_max_cost = 0
         last_min_cost = 10
-        for i in range(prev_skill_frame_id, frame_id):
-            frame_datas[i].calculate()
-            cost = frame_datas[i].cost
-            if cost > 0:
-                last_max_cost = max(cost, last_max_cost)
-                last_min_cost = min(cost, last_min_cost)
+        for i in range(prev_event_frame, event_frame_id):
+            frame_datas[i].calculate_time()
+            c = frame_datas[i].cost
+            if c > 0:
+                last_max_cost = max(c, last_max_cost)
+                last_min_cost = min(c, last_min_cost)
 
+        # Look up CharaSkill for additional info
+        chara_skill = chara_skill_map.get(chara_name)
+        skill_name = chara_skill.skill_name if chara_skill else ""
+        short_name = chara_skill.get_short_chara_name() if chara_skill else format_short_chara_name(chara_name)
+
+        frame_data = frame_datas[event_frame_id]
         row = []
-        row.append(f"{last_max_cost:.1f}") # 発動時コスト
-        row.append(f"{last_min_cost:.1f}") # 残コスト
-        row.append(frame_data.chara_skill.chara_name) # キャラ名
-        row.append(frame_data.chara_skill.get_short_chara_name()) # 短縮キャラ名
-        row.append(frame_data.chara_skill.skill_name) # スキル名
-        row.append(time_to_str(max_time - frame_data.remain_time)) # 残り時間
-        row.append(time_to_str(frame_data.remain_time)) # 経過時間
-        row.append(time_to_str(frame_data.movie_time)) # 動画再生位置
+        row.append(f"{last_max_cost:.1f}")  # 発動時コスト
+        row.append(f"{last_min_cost:.1f}")  # 残コスト
+        row.append(chara_name)  # キャラ名
+        row.append(short_name)  # 短縮キャラ名
+        row.append(skill_name)  # スキル名
+        row.append(time_to_str(max_time - remain_time))  # 経過時間
+        row.append(time_to_str(remain_time))  # 残り時間
+        row.append(time_to_str(frame_data.movie_time))  # 動画再生位置
 
         rows.append(row)
 

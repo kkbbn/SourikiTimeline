@@ -35,40 +35,55 @@ def collect_png_files():
     return files
 
 
-def resolve_dst_filename(filename, dev_name_to_name):
+def resolve_dst_filename(filename, dev_name_to_name, path_name_to_name_ci):
     """Determine the destination filename for a downloaded PNG file.
 
     1. Exact DevName match -> {Name}.png
-    2. DevName prefix match (suffix not starting with lowercase) -> {Name}{suffix}.png
-    3. Fallback -> strip Skill_Portrait_ prefix, keep English name
+    2. Case-insensitive PathName exact match -> {Name}.png
+    3. DevName prefix match ({DevName}_{suffix}) -> {Name}/{suffix}.png
+    4. Case-insensitive PathName prefix match ({PathName}_{suffix}) -> {Name}/{suffix}.png
+    5. Fallback -> strip Skill_Portrait_ prefix, keep English name
     """
     m = re.match(r"Skill_Portrait_(.+)\.png$", filename)
     if not m:
         return filename
 
     char_name = m.group(1)
+    char_name_lower = char_name.lower()
 
     # Step 1: Exact match against DevName
     if char_name in dev_name_to_name:
         return f"{dev_name_to_name[char_name]}.png"
 
-    # Step 2: Find longest DevName that is a prefix of char_name
-    # with the constraint that the suffix doesn't start with a lowercase letter
+    # Step 2: Case-insensitive exact match against PathName
+    if char_name_lower in path_name_to_name_ci:
+        return f"{path_name_to_name_ci[char_name_lower]}.png"
+
+    # Step 3: Find longest DevName that is a prefix of char_name followed by "_"
     best_dev_name = None
     for dev_name in dev_name_to_name:
-        if char_name.startswith(dev_name) and len(dev_name) < len(char_name):
-            # Suffix must not start with lowercase to avoid e.g. "Hina" matching "Hinata"
-            suffix_start = char_name[len(dev_name)]
-            if suffix_start.islower():
-                continue
+        prefix = f"{dev_name}_"
+        if char_name.startswith(prefix):
             if best_dev_name is None or len(dev_name) > len(best_dev_name):
                 best_dev_name = dev_name
 
     if best_dev_name:
-        suffix = char_name[len(best_dev_name):]
-        return f"{dev_name_to_name[best_dev_name]}{suffix}.png"
+        suffix = char_name[len(best_dev_name) + 1 :]
+        return f"{dev_name_to_name[best_dev_name]}/{suffix}.png"
 
-    # Step 3: No match, keep English name
+    # Step 4: Find longest case-insensitive PathName prefix followed by "_"
+    best_path_name = None
+    for path_name in path_name_to_name_ci:
+        prefix = f"{path_name}_"
+        if char_name_lower.startswith(prefix):
+            if best_path_name is None or len(path_name) > len(best_path_name):
+                best_path_name = path_name
+
+    if best_path_name:
+        suffix = char_name[len(best_path_name) + 1 :]
+        return f"{path_name_to_name_ci[best_path_name]}/{suffix}.png"
+
+    # Step 5: No match, keep English name
     return f"{char_name}.png"
 
 
@@ -79,15 +94,21 @@ def main():
     students = fetch_json(SCHALEDB_URL)
     print(f"Found {len(students)} students")
 
-    dev_name_to_name = {s["DevName"]: s["Name"] for s in students.values()}
+    dev_name_to_name = {s["DevName"]: s["Name"] for s in students.values() if "DevName" in s and "Name" in s}
+    path_name_to_name_ci = {
+        s["PathName"].lower(): s["Name"]
+        for s in students.values()
+        if "PathName" in s and "Name" in s and isinstance(s["PathName"], str)
+    }
 
     all_files = collect_png_files()
     print(f"Found {len(all_files)} PNG files in downloads")
 
     copied = 0
     for filename, src_path in all_files:
-        dst_filename = resolve_dst_filename(filename, dev_name_to_name)
+        dst_filename = resolve_dst_filename(filename, dev_name_to_name, path_name_to_name_ci)
         dst_path = os.path.join(ASSETS_DIR, dst_filename)
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
 
         # Cache: skip if destination already exists
         if os.path.exists(dst_path):

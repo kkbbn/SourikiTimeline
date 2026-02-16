@@ -59,28 +59,32 @@ def resolve_dst_filename(filename, dev_name_to_name, path_name_to_name_ci):
     if char_name_lower in path_name_to_name_ci:
         return f"{path_name_to_name_ci[char_name_lower]}.png"
 
-    # Step 3: Find longest DevName that is a prefix of char_name followed by "_"
+    # Step 3: Find longest DevName that is a prefix of char_name.
+    # Suffix can be either "_X" or "X"; if it starts with "_", drop only the first one.
     best_dev_name = None
     for dev_name in dev_name_to_name:
-        prefix = f"{dev_name}_"
-        if char_name.startswith(prefix):
+        if char_name.startswith(dev_name) and len(dev_name) < len(char_name):
             if best_dev_name is None or len(dev_name) > len(best_dev_name):
                 best_dev_name = dev_name
 
     if best_dev_name:
-        suffix = char_name[len(best_dev_name) + 1 :]
+        suffix = char_name[len(best_dev_name) :]
+        if suffix.startswith("_"):
+            suffix = suffix[1:]
         return f"{dev_name_to_name[best_dev_name]}/{suffix}.png"
 
-    # Step 4: Find longest case-insensitive PathName prefix followed by "_"
+    # Step 4: Find longest case-insensitive PathName prefix.
+    # Suffix can be either "_X" or "X"; if it starts with "_", drop only the first one.
     best_path_name = None
     for path_name in path_name_to_name_ci:
-        prefix = f"{path_name}_"
-        if char_name_lower.startswith(prefix):
+        if char_name_lower.startswith(path_name) and len(path_name) < len(char_name_lower):
             if best_path_name is None or len(path_name) > len(best_path_name):
                 best_path_name = path_name
 
     if best_path_name:
-        suffix = char_name[len(best_path_name) + 1 :]
+        suffix = char_name[len(best_path_name) :]
+        if suffix.startswith("_"):
+            suffix = suffix[1:]
         return f"{path_name_to_name_ci[best_path_name]}/{suffix}.png"
 
     # Step 5: No match, keep English name

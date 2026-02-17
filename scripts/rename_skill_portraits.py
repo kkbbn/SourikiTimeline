@@ -13,6 +13,9 @@ PROJECT_DIR = os.path.dirname(SCRIPT_DIR)
 DOWNLOAD_DIR = os.path.join(PROJECT_DIR, "resources", "download")
 ASSETS_DIR = os.path.join(PROJECT_DIR, "resources", "assets")
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+# Some downloaded portrait names do not match students.json keys.
+DEV_NAME_RENAMES = {"CH0258_01": "CH0258"}
+PATH_NAME_ALIAS_KEYS = {"reijo": ["rezyo", "reizyo"]}
 
 
 def fetch_json(url):
@@ -91,6 +94,32 @@ def resolve_dst_filename(filename, dev_name_to_name, path_name_to_name_ci):
     return f"{char_name}.png"
 
 
+def build_name_maps(students):
+    """Build name maps with compatibility aliases for known naming mismatches."""
+    dev_name_to_name = {}
+    path_name_to_name_ci = {}
+
+    for student in students.values():
+        if "Name" not in student:
+            continue
+
+        name = student["Name"]
+
+        dev_name = student.get("DevName")
+        if isinstance(dev_name, str):
+            normalized_dev_name = DEV_NAME_RENAMES.get(dev_name, dev_name)
+            dev_name_to_name[normalized_dev_name] = name
+
+        path_name = student.get("PathName")
+        if isinstance(path_name, str):
+            normalized_path_name = path_name.lower()
+            path_name_to_name_ci[normalized_path_name] = name
+            for alias in PATH_NAME_ALIAS_KEYS.get(normalized_path_name, []):
+                path_name_to_name_ci[alias.lower()] = name
+
+    return dev_name_to_name, path_name_to_name_ci
+
+
 def main():
     os.makedirs(ASSETS_DIR, exist_ok=True)
 
@@ -98,12 +127,7 @@ def main():
     students = fetch_json(SCHALEDB_URL)
     print(f"Found {len(students)} students")
 
-    dev_name_to_name = {s["DevName"]: s["Name"] for s in students.values() if "DevName" in s and "Name" in s}
-    path_name_to_name_ci = {
-        s["PathName"].lower(): s["Name"]
-        for s in students.values()
-        if "PathName" in s and "Name" in s and isinstance(s["PathName"], str)
-    }
+    dev_name_to_name, path_name_to_name_ci = build_name_maps(students)
 
     all_files = collect_png_files()
     print(f"Found {len(all_files)} PNG files in downloads")

@@ -170,7 +170,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                             with gr.Row():
                                 timeline_max_time_number = gr.Number(value=config.timeline_max_time, label="バトルの制限時間(秒)")
                             with gr.Row():
-                                timeline_max_cost_slider = gr.Slider(value=app_config.timeline_max_cost, label="コスト最大値", info="コストバーの満タン時コスト(タイムライン生成時に使用)", minimum=10, maximum=11, step=0.5)
+                                timeline_max_cost_slider = gr.Slider(value=app_config.timeline_max_cost, label="コスト最大値", info="コストバーの満タン時コスト(タイムライン生成時に使用)", minimum=10, maximum=11, step=0.1)
                         with gr.TabItem("表示設定(共通)"):
                             add_space(1)
                             with gr.Row():

@@ -9,6 +9,41 @@ from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
 from scripts.gradio_utils import download_video_gr, mask_preview_gr, save_mask_gr, save_memo_gr, timeline_generate_gr, create_project_gr, reload_workspace_gr, select_project_gr, select_workspace_gr, timeline_update_gr, load_mask_gr
 from scripts.platform_utils import open_path_in_explorer
 
+
+def apply_gradio_compatibility_patches():
+    # gradio==4.44.x can receive boolean JSON schema nodes from newer pydantic.
+    # Treat boolean schemas as bool types instead of raising TypeError.
+    try:
+        from gradio_client import utils as gradio_client_utils
+
+        original_get_type = gradio_client_utils.get_type
+
+        def safe_get_type(schema):
+            if isinstance(schema, bool):
+                return "boolean"
+            return original_get_type(schema)
+
+        gradio_client_utils.get_type = safe_get_type
+    except Exception:
+        pass
+
+    # Gradio checks URL reachability using the bind address. For 0.0.0.0 this can
+    # fail even when the server is healthy, so probe localhost instead.
+    try:
+        from gradio import networking as gradio_networking
+
+        original_url_ok = gradio_networking.url_ok
+
+        def safe_url_ok(url: str) -> bool:
+            if isinstance(url, str) and "://0.0.0.0" in url:
+                url = url.replace("://0.0.0.0", "://127.0.0.1")
+            return original_url_ok(url)
+
+        gradio_networking.url_ok = safe_url_ok
+    except Exception:
+        pass
+
+
 movie_downloaders = ["pytube", "yt-dlp"]
 download_formats = ["mp4", "webm"]
 chara_names = [x.chara_name for x in CharaSkill.from_tsv()]
@@ -481,6 +516,8 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                             outputs=base_output)
 
 if __name__ == "__main__":
+    apply_gradio_compatibility_patches()
+
     parser = argparse.ArgumentParser(description="Launch the SourikiTimeline Gradio app")
     parser.add_argument(
         "--host",
@@ -492,10 +529,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Do not open a browser automatically on launch",
     )
+    parser.add_argument(
+        "--share",
+        action="store_true",
+        help="Create a public Gradio share link",
+    )
     args = parser.parse_args()
 
     demo.launch(
         server_name=args.host,
         inbrowser=not args.no_browser,
+        share=args.share,
         allowed_paths=[app_config.workspace_path],
     )

@@ -15,6 +15,6 @@ source ./venv/bin/activate
 
 "pip${PYTHON_VERSION}" freeze
 
-"python${PYTHON_VERSION}" ./launch.py
+"python${PYTHON_VERSION}" ./launch.py "$@"
 
 deactivate

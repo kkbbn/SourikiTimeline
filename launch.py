@@ -1,4 +1,5 @@
 import os
+import argparse
 import gradio as gr
 from gradio_modal import Modal
 
@@ -480,7 +481,21 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                             outputs=base_output)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Launch the SourikiTimeline Gradio app")
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind host/IP for Gradio server (e.g. 127.0.0.1, 0.0.0.0)",
+    )
+    parser.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Do not open a browser automatically on launch",
+    )
+    args = parser.parse_args()
+
     demo.launch(
-        inbrowser=True,
+        server_name=args.host,
+        inbrowser=not args.no_browser,
         allowed_paths=[app_config.workspace_path],
     )

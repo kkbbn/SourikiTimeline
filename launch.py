@@ -169,6 +169,8 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                                 timeline_ignore_chara_names_dropdown = gr.Dropdown(chara_names, value=config.timeline_ignore_chara_names, multiselect=True, label="除外キャラ名一覧", info="ギミックの文字などで誤認識する場合に指定")
                             with gr.Row():
                                 timeline_max_time_number = gr.Number(value=config.timeline_max_time, label="バトルの制限時間(秒)")
+                            with gr.Row():
+                                timeline_max_cost_slider = gr.Slider(value=app_config.timeline_max_cost, label="コスト最大値", info="コストバーの満タン時コスト(タイムライン生成時に使用)", minimum=10, maximum=11, step=0.5)
                         with gr.TabItem("表示設定(共通)"):
                             add_space(1)
                             with gr.Row():
@@ -246,6 +248,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
         timeline_visible_columns_checkbox,
         timeline_cost_omit_seconds_slider,
         timeline_remain_cost_omit_value_slider,
+        timeline_max_cost_slider,
         timeline_newline_chara_names_dropdown,
         timeline_newline_before_chara,
         timeline_newline_after_chara,

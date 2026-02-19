@@ -125,6 +125,7 @@ class AppConfig(JsonConfig):
     timeline_visible_columns: list[str] = field(default_factory=lambda: ["発動時コスト", "短縮キャラ名"])
     timeline_cost_omit_seconds: float = 3.0
     timeline_remain_cost_omit_value: float = 1.0
+    timeline_max_cost: float = 10.0
     timeline_newline_chara_names: list[str] = field(default_factory=lambda: [])
     timeline_newline_before_chara: bool = False
     timeline_newline_after_chara: bool = True

@@ -292,6 +292,9 @@ def create_test_image(config: ProjectConfig, project_path, target_time=0):
     skill_color2 = config.mask_skill_color2
     skill_color_threshold = config.mask_skill_color_threshold
     ignore_chara_names = config.timeline_ignore_chara_names
+    max_cost = app_config.timeline_max_cost
+    if max_cost <= 0:
+        max_cost = 10.0
     skill_mask_rect = config.get_skill_mask_rect()
     cost_mask_rect = config.get_cost_mask_rect()
     time_mask_rect = config.get_time_mask_rect()
@@ -325,7 +328,7 @@ def create_test_image(config: ProjectConfig, project_path, target_time=0):
                 cost_mask_rect,
                 cost_color1,
                 cost_color2,
-                cost_color_threshold) / 10
+                cost_color_threshold) * max_cost / 100
 
     output_image = input_image.copy()
 
@@ -335,7 +338,7 @@ def create_test_image(config: ProjectConfig, project_path, target_time=0):
 
     # costの位置に線を引く
     x, y, w, h = cost_mask_rect
-    x += int(w * cost / 10)
+    x += int(w * cost / max_cost)
     draw_image_line(output_image, (x, y), (x, y+h), '#ffffff')
 
     skill_info = f"{skill_text}: {chara_skill.chara_name} ({similarity:.2f}%)" if chara_skill is not None else "None"
@@ -350,7 +353,7 @@ def create_test_image(config: ProjectConfig, project_path, target_time=0):
     font_size = 40 * image_scale
     stroke_width = 3 * image_scale
     output_image = draw_image_string(output_image, skill_info, rect_to_position(skill_mask_rect, (0, 50 * image_scale)), '#ff0000', font_size, stroke_width)
-    output_image = draw_image_string(output_image, f"コスト: {cost}", rect_to_position(cost_mask_rect, (0, -50 * image_scale)), '#0000ff', font_size, stroke_width)
+    output_image = draw_image_string(output_image, f"コスト: {cost:.1f}", rect_to_position(cost_mask_rect, (0, -50 * image_scale)), '#0000ff', font_size, stroke_width)
     output_image = draw_image_string(output_image, time_text, rect_to_position(time_mask_rect, (0, 50 * image_scale)), '#00ff00', font_size, stroke_width)
 
     skill_name = chara_skill.skill_name if chara_skill is not None else ""
@@ -372,6 +375,9 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
     skill_color_fill_percentage = config.mask_skill_color_fill_percentage
     ignore_chara_names = config.timeline_ignore_chara_names
     max_time = config.timeline_max_time
+    max_cost = app_config.timeline_max_cost
+    if max_cost <= 0:
+        max_cost = 10.0
     movie_x = config.movie_x
     movie_y = config.movie_y
     movie_width = config.movie_width
@@ -452,7 +458,7 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
                         cost_mask_rect,
                         cost_color1,
                         cost_color2,
-                        cost_color_threshold) / 10
+                        cost_color_threshold) * max_cost / 100
                 
                 frame_data = FrameData(
                     chara_skill,
@@ -482,7 +488,7 @@ def _timeline_generate_gr(config: ProjectConfig, project_path: str):
             prev_skill_frame_id = max(used_skill_frame_ids[skill_index - 1], prev_skill_frame_id)
 
         last_max_cost = 0
-        last_min_cost = 10
+        last_min_cost = max_cost
         for i in range(prev_skill_frame_id, frame_id):
             frame_datas[i].calculate()
             cost = frame_datas[i].cost

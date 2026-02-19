@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+PYTHON_VERSION="${PYTHON_VERSION:-3}"
+
 cd `dirname $0`
 
 touch .local_version
@@ -11,8 +13,8 @@ fi
 
 source ./venv/bin/activate
 
-pip3 freeze
+"pip${PYTHON_VERSION}" freeze
 
-python3 ./launch.py
+"python${PYTHON_VERSION}" ./launch.py
 
 deactivate

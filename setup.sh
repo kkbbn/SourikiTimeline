@@ -1,15 +1,17 @@
 #!/bin/bash -ex
 
+PYTHON_VERSION="${PYTHON_VERSION:-3}"
+
 cd `dirname $0`
 
 #skip_key_wait=$1
 
-python3 -m venv venv
+"python${PYTHON_VERSION}" -m venv venv
 source ./venv/bin/activate
 
-pip3 install --upgrade -r requirements-unix.txt
+"pip${PYTHON_VERSION}" install --upgrade -r requirements-unix.txt
 
-pip3 freeze
+"pip${PYTHON_VERSION}" freeze
 
 cat VERSION > .local_version
 

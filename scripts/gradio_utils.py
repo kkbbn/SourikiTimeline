@@ -83,7 +83,16 @@ def create_project_gr(url: str):
 
     if url == "":
         config = ProjectConfig.load(app_config.project_path)
-        return ["URLが入力されていません。", "", None, *asdict(config).values()]
+        return [
+            "URLが入力されていません。",
+            app_config.project_path,
+            app_config.get_current_preimage(),
+            None,
+            None,
+            None,
+            *asdict(config).values(),
+            *([None] * 13),
+        ]
 
     title, author, thumbnail_url = get_video_info(url, app_config.downloader)
 
@@ -91,8 +100,17 @@ def create_project_gr(url: str):
 
     project_path = os.path.join(app_config.workspace_path, new_score_name)
     if os.path.exists(project_path):
-        config = ProjectConfig.load(app_config.project_path)
-        return ["すでに同名ディレクトリが存在しています。", project_path, None, *asdict(config).values()]
+        config = ProjectConfig.load(project_path)
+        return [
+            "すでに同名ディレクトリが存在しています。",
+            project_path,
+            AppConfig.get_preimage(project_path),
+            None,
+            None,
+            None,
+            *asdict(config).values(),
+            *([None] * 13),
+        ]
 
     os.mkdir(project_path)
 

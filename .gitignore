@@ -13,3 +13,4 @@ resources/download/*
 !resources/download/.gitkeep
 resources/assets/*
 !resources/assets/.gitkeep
+/.gradio

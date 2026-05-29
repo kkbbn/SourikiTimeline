@@ -18,7 +18,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Create a SourikiTimeline project and download its video.",
     )
-    parser.add_argument("url", help="YouTube URL to create a project from.")
+    parser.add_argument("url", help="Video URL to create a project from.")
     parser.add_argument(
         "--workspace",
         help="Workspace directory. Defaults to the workspace path in config.json.",
@@ -32,7 +32,7 @@ def parse_args():
         "--format",
         dest="download_format",
         choices=["mp4", "webm"],
-        help="Video format to download.",
+        help="Video format to download. Defaults to mp4 when yt-dlp is used.",
     )
     return parser.parse_args()
 
@@ -47,6 +47,7 @@ def main():
         create_project_from_url,
         download_project_video,
     )
+    from scripts.media_utils import get_effective_downloader
 
     app_config = AppConfig.instance()
 
@@ -56,6 +57,8 @@ def main():
         app_config.downloader = args.downloader
     if args.download_format:
         app_config.download_format = args.download_format
+    elif get_effective_downloader(args.url, app_config.downloader) == "yt-dlp":
+        app_config.download_format = "mp4"
 
     try:
         created = create_project_from_url(args.url, app_config)

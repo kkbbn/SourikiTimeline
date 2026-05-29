@@ -109,7 +109,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                     thumbnail_height_slider = gr.Number(value=app_config.thumbnail_height, label="Thumbnail Height", visible=False)
                     thumbnail_file_textbox = gr.Textbox(label="Thumbnail File Name", value=config.movie_thumbnail_file_name, visible=False)
 
-                    movie_url_textbox = gr.Textbox(label="Youtube URL", value=config.movie_url, interactive=False)
+                    movie_url_textbox = gr.Textbox(label="動画URL", value=config.movie_url, interactive=False)
                     artist_textbox = gr.Textbox(label="投稿者", value=config.author, interactive=False)
                     project_path_textbox = gr.Textbox(label="動画保存フォルダ", value=app_config.project_path, visible=False)
 
@@ -241,7 +241,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
     with create_project_modal:
         with gr.Row():
             with gr.Column(scale=1.5):
-                create_project_url_textbox = gr.Textbox(label="タイムライン出力する動画のURL", value="", info="タイムラインの出力をしたいYouTubeのURLを入力してください")
+                create_project_url_textbox = gr.Textbox(label="タイムライン出力する動画のURL", value="", info="タイムラインの出力をしたい動画のURLを入力してください")
                 create_project_button = gr.Button("作成", variant="primary")
             with gr.Column(scale=1):
                 create_project_output = gr.Markdown(show_label=False)
@@ -454,6 +454,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                                   outputs=[
                                         create_project_output,
                                         workspace_gallery,
+                                        download_format_dropdown,
                                         project_path_textbox,
                                         project_image,
                                         timeline_dataframe,

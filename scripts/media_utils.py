@@ -49,6 +49,8 @@ def resize_image(input_image_path, output_image_path, size):
 
 @debug_args
 def get_video_info(url, downloader):
+    downloader = get_effective_downloader(url, downloader)
+
     if downloader == "pytube":
         yt = YouTube(url)
 
@@ -68,12 +70,27 @@ def get_video_info(url, downloader):
             info = ydl.extract_info(url, download=False)
 
             title = info.get('title', '')
-            author = info.get('uploader', '')
+            author = info.get('uploader') or info.get('creator') or info.get('channel') or ''
             thumbnail_url = info.get('thumbnail', '')
     else:
         raise Exception(f"サポートされていないダウンローダーです。 downloader: {downloader}")
 
     return title, author, thumbnail_url
+
+def get_video_provider(url):
+    hostname = urllib.parse.urlparse(url).hostname or ""
+    hostname = hostname.lower()
+
+    if hostname == "youtu.be" or hostname == "youtube.com" or hostname.endswith(".youtube.com"):
+        return "youtube"
+    if hostname == "bilibili.com" or hostname.endswith(".bilibili.com") or hostname == "b23.tv":
+        return "bilibili"
+    return "generic"
+
+def get_effective_downloader(url, downloader):
+    if get_video_provider(url) != "youtube" and downloader == "pytube":
+        return "yt-dlp"
+    return downloader
 
 @debug_args
 def format_youtube_url(url):
@@ -143,6 +160,34 @@ def ydl_download(url, output_path, format):
         if result != 0:
             raise Exception(f"ダウンロードに失敗しました。 url: {url}")
 
+def get_yt_dlp_format_selector(ext):
+    if ext == ".mp4":
+        return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+    if ext == ".webm":
+        return "bestvideo[ext=webm]+bestaudio[ext=webm]/best[ext=webm]"
+    raise Exception(f"サポートされていない拡張子です。 ext: {ext}")
+
+@debug_args
+def download_with_yt_dlp(url, output_path):
+    if os.path.exists(output_path):
+        os.remove(output_path)
+
+    ext = os.path.splitext(output_path)[1]
+    output_format = ext[1:]
+    option = {
+        'outtmpl': output_path,
+        'format': get_yt_dlp_format_selector(ext),
+        'ffmpeg_location': FFMPEG_BINARY,
+        'cookiesfrombrowser': ('chrome',),
+        'remote_components': ['ejs:github'],
+        'merge_output_format': output_format,
+    }
+
+    with YoutubeDL(option) as ydl:
+        result = ydl.download([url])
+        if result != 0:
+            raise Exception(f"ダウンロードに失敗しました。 url: {url}")
+
 @debug_args
 def download_youtube_with_yt_dlp(url, output_path):
     url = format_youtube_url(url)
@@ -173,11 +218,15 @@ def download_youtube_with_yt_dlp(url, output_path):
 @debug_args
 def download_video(url, output_path, downloader):
     duration = 0
+    downloader = get_effective_downloader(url, downloader)
 
     if downloader == "pytube":
         download_youtube_with_pytube(url, output_path)
     elif downloader == "yt-dlp":
-        download_youtube_with_yt_dlp(url, output_path)
+        if get_video_provider(url) == "youtube":
+            download_youtube_with_yt_dlp(url, output_path)
+        else:
+            download_with_yt_dlp(url, output_path)
     else:
         raise Exception(f"サポートされていないダウンローダーです。 downloader: {downloader}")
 

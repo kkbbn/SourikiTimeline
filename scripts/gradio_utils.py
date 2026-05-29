@@ -14,7 +14,7 @@ from scripts.common_utils import load_memo, load_timeline, save_image, save_memo
 from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
 from scripts.debug_timer import DebugTimer
 from scripts.debug_utils import debug_args
-from scripts.media_utils import extract_video_frame
+from scripts.media_utils import extract_video_frame, get_effective_downloader
 from scripts.ocr_utils import crop_image, draw_image_line, draw_image_rect, draw_image_string, get_color_fill_percentage, get_image_bar_percentage, get_mask_image_rect, ocr_image
 from scripts.platform_utils import get_folder_path
 from scripts.project_utils import ProjectAlreadyExistsError, create_project_from_url, download_project_video
@@ -140,8 +140,12 @@ def create_project_gr(url: str):
         return [
             "URLが入力されていません。",
             app_config.get_all_gallery(),
+            app_config.download_format,
             *get_project_ui_outputs(app_config.project_path),
         ]
+
+    if get_effective_downloader(url, app_config.downloader) == "yt-dlp":
+        app_config.download_format = "mp4"
 
     try:
         result = create_project_from_url(url, app_config)
@@ -149,6 +153,7 @@ def create_project_gr(url: str):
         return [
             "すでに同名ディレクトリが存在しています。",
             app_config.get_all_gallery(),
+            app_config.download_format,
             *get_project_ui_outputs(e.project_path),
         ]
 
@@ -158,6 +163,7 @@ def create_project_gr(url: str):
     return [
         output_log,
         app_config.get_all_gallery(),
+        app_config.download_format,
         *get_project_ui_outputs(result.project_path),
     ]
 

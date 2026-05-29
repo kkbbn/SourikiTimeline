@@ -23,6 +23,21 @@ app_config = AppConfig.instance()
 
 PROJECT_OUTPUT_FALLBACKS = [None, None]
 
+def get_current_project_path():
+    project_paths = app_config.get_project_paths()
+    if app_config.project_path in project_paths:
+        return app_config.project_path
+
+    return project_paths[0] if len(project_paths) > 0 else ""
+
+def normalize_current_project():
+    project_path = get_current_project_path()
+    if app_config.project_path != project_path:
+        app_config.project_path = project_path
+        app_config.save(".")
+
+    return project_path
+
 def get_project_ui_outputs(project_path: str):
     if project_path == "":
         config = ProjectConfig()
@@ -67,6 +82,15 @@ def get_selected_project_delete_path():
     return project_path
 
 @debug_args
+def load_app_gr():
+    project_path = normalize_current_project()
+    return [
+        app_config.workspace_path,
+        app_config.get_all_gallery(),
+        *get_project_ui_outputs(project_path),
+    ]
+
+@debug_args
 def auto_save(config: ProjectConfig, project_path: str):
     if not app_config.auto_save:
         return ""
@@ -89,7 +113,7 @@ def select_workspace_gr():
 
     output_log = f"ワークスペースを開きました。{workspace_path}\n\n"
 
-    return [output_log, workspace_path]
+    return [output_log, workspace_path, app_config.get_all_gallery()]
 
 @debug_args
 def select_project_gr(evt: gr.SelectData):
@@ -118,6 +142,7 @@ def create_project_gr(url: str):
     if url == "":
         return [
             "URLが入力されていません。",
+            app_config.get_all_gallery(),
             *get_project_ui_outputs(app_config.project_path),
         ]
 
@@ -129,6 +154,7 @@ def create_project_gr(url: str):
     if os.path.exists(project_path):
         return [
             "すでに同名ディレクトリが存在しています。",
+            app_config.get_all_gallery(),
             *get_project_ui_outputs(project_path),
         ]
 
@@ -161,16 +187,13 @@ def create_project_gr(url: str):
 
     return [
         output_log,
+        app_config.get_all_gallery(),
         *get_project_ui_outputs(project_path),
     ]
 
 @debug_args
 def reload_workspace_gr():
-    gallery = app_config.get_all_gallery()
-    if len(gallery) == 0:
-        return None
-
-    return gallery
+    return app_config.get_all_gallery()
 
 @debug_args
 def delete_project_gr():

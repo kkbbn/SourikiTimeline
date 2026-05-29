@@ -6,7 +6,7 @@ from gradio_modal import Modal
 from scripts.chara_skill import CharaSkill
 from scripts.common_utils import load_timeline, load_memo
 from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
-from scripts.gradio_utils import download_video_gr, mask_preview_gr, save_mask_gr, save_memo_gr, timeline_generate_gr, create_project_gr, delete_project_gr, reload_workspace_gr, select_project_gr, select_workspace_gr, timeline_update_gr, load_mask_gr
+from scripts.gradio_utils import download_video_gr, mask_preview_gr, save_mask_gr, save_memo_gr, timeline_generate_gr, create_project_gr, delete_project_gr, load_app_gr, reload_workspace_gr, select_project_gr, select_workspace_gr, timeline_update_gr, load_mask_gr
 from scripts.platform_utils import open_path_in_explorer
 
 
@@ -365,6 +365,20 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
         mask_time_h_slider,
     ]
 
+    demo.load(load_app_gr,
+              inputs=[],
+              outputs=[
+                    workspace_path_textbox,
+                    workspace_gallery,
+                    project_path_textbox,
+                    project_image,
+                    timeline_dataframe,
+                    timeline_dataframe_tsv,
+                    timeline_memo_textbox,
+                    *inputs,
+                    *outputs,
+              ])
+
     show_create_project_button.click(
         fn=lambda: gr.update(visible=True),
         inputs=None,
@@ -417,6 +431,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                                   outputs=[
                                         base_output,
                                         workspace_path_textbox,
+                                        workspace_gallery,
                                   ])
 
     workspace_gallery.select(select_project_gr,
@@ -438,6 +453,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                                   ],
                                   outputs=[
                                         create_project_output,
+                                        workspace_gallery,
                                         project_path_textbox,
                                         project_image,
                                         timeline_dataframe,

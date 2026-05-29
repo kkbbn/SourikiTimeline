@@ -6,7 +6,7 @@ from gradio_modal import Modal
 from scripts.chara_skill import CharaSkill
 from scripts.common_utils import load_timeline, load_memo
 from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
-from scripts.gradio_utils import download_video_gr, mask_preview_gr, save_mask_gr, save_memo_gr, timeline_generate_gr, create_project_gr, reload_workspace_gr, select_project_gr, select_workspace_gr, timeline_update_gr, load_mask_gr
+from scripts.gradio_utils import download_video_gr, mask_preview_gr, save_mask_gr, save_memo_gr, timeline_generate_gr, create_project_gr, delete_project_gr, reload_workspace_gr, select_project_gr, select_workspace_gr, timeline_update_gr, load_mask_gr
 from scripts.platform_utils import open_path_in_explorer
 
 
@@ -84,6 +84,7 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
             title_textbox = gr.Textbox(label="タイトル", value=config.title, interactive=False)
         with gr.Column(scale=0.5, min_width=50):
             open_project_button = gr.Button("開く", variant="secondary", size="sm")
+            delete_project_button = gr.Button("削除", variant="stop", size="sm")
         with gr.Column(scale=3):
             base_output = gr.Markdown(show_label=False)
 
@@ -378,6 +379,20 @@ with gr.Blocks(title="総力戦タイムラインメーカー", js=js) as demo:
                                 inputs=None,
                                 outputs=None
                             )
+
+    delete_project_button.click(delete_project_gr,
+                                inputs=[],
+                                outputs=[
+                                    base_output,
+                                    workspace_gallery,
+                                    project_path_textbox,
+                                    project_image,
+                                    timeline_dataframe,
+                                    timeline_dataframe_tsv,
+                                    timeline_memo_textbox,
+                                    *inputs,
+                                    *outputs,
+                                ])
 
     show_load_mask_button.click(
         fn=lambda: [gr.update(visible=True), gr.update(choices=get_mask_image_names())],

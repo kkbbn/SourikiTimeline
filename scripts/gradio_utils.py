@@ -1,6 +1,7 @@
 from dataclasses import asdict
 import datetime
 import os
+import shutil
 import gradio as gr
 import numpy as np
 import pandas as pd
@@ -19,6 +20,51 @@ from scripts.ocr_utils import crop_image, draw_image_line, draw_image_rect, draw
 from scripts.platform_utils import get_folder_path
 
 app_config = AppConfig.instance()
+
+PROJECT_OUTPUT_FALLBACKS = [None, None]
+
+def get_project_ui_outputs(project_path: str):
+    if project_path == "":
+        config = ProjectConfig()
+        dataframe = None
+        dataframe_tsv = None
+        memo = ""
+    else:
+        config = ProjectConfig.load(project_path)
+        source_dataframe = load_timeline(project_path)
+        dataframe, dataframe_tsv = config.convert_timeline_and_tsv(source_dataframe)
+        memo = load_memo(project_path)
+
+    return [
+        project_path,
+        AppConfig.get_preimage(project_path),
+        dataframe,
+        dataframe_tsv,
+        memo,
+        *asdict(config).values(),
+        *PROJECT_OUTPUT_FALLBACKS,
+    ]
+
+def get_selected_project_delete_path():
+    project_path = app_config.project_path
+    if project_path == "":
+        raise Exception("削除するプロジェクトを選択してください。")
+
+    workspace_path = os.path.abspath(os.path.expanduser(app_config.workspace_path))
+    project_path = os.path.abspath(os.path.expanduser(project_path))
+
+    if not os.path.isdir(project_path):
+        raise Exception(f"削除するプロジェクトが見つかりません。\n\n{project_path}")
+
+    if os.path.islink(project_path):
+        raise Exception(f"シンボリックリンクのプロジェクトは削除できません。\n\n{project_path}")
+
+    is_direct_child = os.path.dirname(project_path) == workspace_path
+    is_in_workspace = os.path.commonpath([workspace_path, project_path]) == workspace_path
+    if not is_direct_child or not is_in_workspace:
+        raise Exception(f"ワークスペース直下のプロジェクトだけ削除できます。\n\n{project_path}")
+
+    return project_path
 
 @debug_args
 def auto_save(config: ProjectConfig, project_path: str):
@@ -53,27 +99,15 @@ def select_project_gr(evt: gr.SelectData):
         raise Exception(f"選択しているプロジェクトが見つかりません。 {evt.indexs}")
 
     project_path = project_paths[evt.index]
-    config = ProjectConfig.load(project_path)
 
     app_config.project_path = project_path
     app_config.save(".")
-
-    source_dataframe = load_timeline(project_path)
-    dataframe, dataframe_tsv = config.convert_timeline_and_tsv(source_dataframe)
-
-    memo = load_memo(project_path)
 
     output_log = f"プロジェクトをロードしました。\n\n{project_path}\n\n"
 
     return [
         output_log,
-        project_path,
-        app_config.get_current_preimage(),
-        dataframe,
-        dataframe_tsv,
-        memo,
-        *asdict(config).values(),
-        *([None] * 13),
+        *get_project_ui_outputs(project_path),
     ]
 
 @debug_args
@@ -82,16 +116,9 @@ def create_project_gr(url: str):
         os.mkdir(app_config.workspace_path)
 
     if url == "":
-        config = ProjectConfig.load(app_config.project_path)
         return [
             "URLが入力されていません。",
-            app_config.project_path,
-            app_config.get_current_preimage(),
-            None,
-            None,
-            None,
-            *asdict(config).values(),
-            *([None] * 13),
+            *get_project_ui_outputs(app_config.project_path),
         ]
 
     title, author, thumbnail_url = get_video_info(url, app_config.downloader)
@@ -100,16 +127,9 @@ def create_project_gr(url: str):
 
     project_path = os.path.join(app_config.workspace_path, new_score_name)
     if os.path.exists(project_path):
-        config = ProjectConfig.load(project_path)
         return [
             "すでに同名ディレクトリが存在しています。",
-            project_path,
-            AppConfig.get_preimage(project_path),
-            None,
-            None,
-            None,
-            *asdict(config).values(),
-            *([None] * 13),
+            *get_project_ui_outputs(project_path),
         ]
 
     os.mkdir(project_path)
@@ -141,13 +161,7 @@ def create_project_gr(url: str):
 
     return [
         output_log,
-        project_path,
-        app_config.get_current_preimage(),
-        None,
-        None,
-        None,
-        *asdict(config).values(),
-        *([None] * 13),
+        *get_project_ui_outputs(project_path),
     ]
 
 @debug_args
@@ -157,6 +171,30 @@ def reload_workspace_gr():
         return None
 
     return gallery
+
+@debug_args
+def delete_project_gr():
+    project_path = get_selected_project_delete_path()
+    shutil.rmtree(project_path)
+
+    project_name = os.path.basename(project_path)
+    project_paths = app_config.get_project_paths()
+    next_project_path = project_paths[0] if len(project_paths) > 0 else ""
+
+    app_config.project_path = next_project_path
+    app_config.save(".")
+
+    output_log = f"プロジェクトを削除しました。\n\n{project_name}\n{project_path}\n\n"
+    if next_project_path == "":
+        output_log += "プロジェクトが選択されていません。\n\n"
+    else:
+        output_log += f"次のプロジェクトをロードしました。\n\n{next_project_path}\n\n"
+
+    return [
+        output_log,
+        app_config.get_all_gallery(),
+        *get_project_ui_outputs(next_project_path),
+    ]
 
 @debug_args
 def _download_video_gr(config: ProjectConfig, project_path):

@@ -6,18 +6,18 @@ import gradio as gr
 import numpy as np
 import pandas as pd
 import pyperclip
-import requests
 import ctypes
 from moviepy import VideoFileClip
 
 from scripts.chara_skill import CharaSkill
-from scripts.common_utils import convert_safe_filename, load_memo, load_timeline, save_image, save_memo, save_timeline, str_to_time, time_to_str
+from scripts.common_utils import load_memo, load_timeline, save_image, save_memo, save_timeline, str_to_time, time_to_str
 from scripts.config_utils import AppConfig, ProjectConfig, get_timeline_columns
 from scripts.debug_timer import DebugTimer
 from scripts.debug_utils import debug_args
-from scripts.media_utils import download_video, extract_video_frame, get_video_info, resize_image
+from scripts.media_utils import extract_video_frame
 from scripts.ocr_utils import crop_image, draw_image_line, draw_image_rect, draw_image_string, get_color_fill_percentage, get_image_bar_percentage, get_mask_image_rect, ocr_image
 from scripts.platform_utils import get_folder_path
+from scripts.project_utils import ProjectAlreadyExistsError, create_project_from_url, download_project_video
 
 app_config = AppConfig.instance()
 
@@ -136,9 +136,6 @@ def select_project_gr(evt: gr.SelectData):
 
 @debug_args
 def create_project_gr(url: str):
-    if not os.path.exists(app_config.workspace_path):
-        os.mkdir(app_config.workspace_path)
-
     if url == "":
         return [
             "URLが入力されていません。",
@@ -146,41 +143,14 @@ def create_project_gr(url: str):
             *get_project_ui_outputs(app_config.project_path),
         ]
 
-    title, author, thumbnail_url = get_video_info(url, app_config.downloader)
-
-    new_score_name = convert_safe_filename(f"{author} - {title}")
-
-    project_path = os.path.join(app_config.workspace_path, new_score_name)
-    if os.path.exists(project_path):
+    try:
+        result = create_project_from_url(url, app_config)
+    except ProjectAlreadyExistsError as e:
         return [
             "すでに同名ディレクトリが存在しています。",
             app_config.get_all_gallery(),
-            *get_project_ui_outputs(project_path),
+            *get_project_ui_outputs(e.project_path),
         ]
-
-    os.mkdir(project_path)
-
-    config = ProjectConfig.load(project_path)
-    config.movie_url = url
-    config.title = title
-    config.author = author
-    config.save(project_path)
-
-    # サムネDL
-    thumbnail_file_name = config.movie_thumbnail_file_name
-    thumbnail_path = os.path.join(project_path, thumbnail_file_name)
-
-    response = requests.get(thumbnail_url)
-    with open(thumbnail_path, "wb") as file:
-        file.write(response.content)
-
-    thumbnail_width = app_config.thumbnail_width
-    thumbnail_height = app_config.thumbnail_height
-
-    resize_image(thumbnail_path, thumbnail_path, (thumbnail_width, thumbnail_height))
-
-    app_config.project_path = project_path
-    app_config.save(".")
 
     output_log = "プロジェクト作成に成功しました。\n\n"
     output_log += '"ダウンロード"タブに進んでください。\n\n'
@@ -188,7 +158,7 @@ def create_project_gr(url: str):
     return [
         output_log,
         app_config.get_all_gallery(),
-        *get_project_ui_outputs(project_path),
+        *get_project_ui_outputs(result.project_path),
     ]
 
 @debug_args
@@ -221,33 +191,27 @@ def delete_project_gr():
 
 @debug_args
 def _download_video_gr(config: ProjectConfig, project_path):
-    url = config.movie_url
-    output_file_name = config.get_fixed_download_file_name()
-    output_path = os.path.join(project_path, output_file_name)
-    downloader = app_config.downloader
-
-    if url == "":
+    if config.movie_url == "":
         raise Exception("URLを入力してください。")
 
-    duration, width, height = download_video(
-        url,
-        output_path,
-        downloader)
-
-    config.movie_width = width
-    config.movie_height = height
-    config.movie_end_time = duration
-    config.save(project_path)
+    result = download_project_video(project_path, config, app_config)
 
     output_log = "動画のダウンロードに成功しました。\n\n"
     output_log += '"マスク調整"タブに進んでください。\n\n'
 
-    output_log += f"- 再生時間: {duration}\n"
-    output_log += f"- 解像度: {width} x {height}\n\n"
+    output_log += f"- 再生時間: {result.duration}\n"
+    output_log += f"- 解像度: {result.width} x {result.height}\n\n"
 
-    auto_save(config, project_path)
+    auto_save(result.config, project_path)
 
-    return [config, output_log, output_path, duration, width, height]
+    return [
+        result.config,
+        output_log,
+        result.output_path,
+        result.duration,
+        result.width,
+        result.height,
+    ]
 
 @debug_args
 def parse_args(*args, project_path=None):

@@ -10,4 +10,5 @@ pyperclip
 pytubefix
 secretstorage
 yt-dlp
+yt-dlp-ejs
 beautifulsoup4
